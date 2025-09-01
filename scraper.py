@@ -1,11 +1,10 @@
-from telethon import TelegramClient, events
+from telethon import TelegramClient
 import asyncio
 import csv
 import json
 import os
 from configparser import ConfigParser
 from datetime import datetime
-import time
 
 class TelegramGroupScraper:
     def __init__(self, config_file='config.ini'):
@@ -44,7 +43,6 @@ class TelegramGroupScraper:
             )
         else:
             print("No configuration found. Please enter your Telegram API credentials:")
-            print("(Get these from https://my.telegram.org)")
             api_id = input("API ID: ").strip()
             api_hash = input("API Hash: ").strip()
             phone_number = input("Phone Number (with country code, e.g., +1234567890): ").strip()
@@ -67,12 +65,8 @@ class TelegramGroupScraper:
     
     async def scrape_group_members(self, group_identifier, output_file=None, include_bots=False):
         """
-        Scrape members from a specific group/channel
-        
-        Args:
-            group_identifier: Group username (@groupname), invite link, or group name
-            output_file: Custom output filename (optional)
-            include_bots: Whether to include bot accounts
+        Scrape members from a specific group/channel.
+        🚨 Only collects users that have a USERNAME.
         """
         phone_number = await self.initialize_client()
         
@@ -84,110 +78,71 @@ class TelegramGroupScraper:
             # Get group entity
             try:
                 group = await self.client.get_entity(group_identifier)
-                print(f"Found group: {getattr(group, 'title', 'Unknown')}")
-                print(f"   Group ID: {group.id}")
-                print(f"   Group Type: {type(group).__name__}")
+                print(f"✅ Found group: {getattr(group, 'title', 'Unknown')}")
             except Exception as e:
-                print(f"Error finding group '{group_identifier}': {e}")
-                print("Try using:")
-                print("   - @username (for public groups)")
-                print("   - Exact group name")
-                print("   - Group invite link")
+                print(f"❌ Error finding group '{group_identifier}': {e}")
                 return
             
-            print("📥 Fetching members... (this may take a while for large groups)")
+            print("📥 Fetching members (only those with username)...")
             
-            # Get all members with progress tracking
+            # Get all members
+            members = []
             try:
-                members = []
                 async for member in self.client.iter_participants(group):
-                    members.append(member)
+                    # Skip bots unless explicitly requested
+                    if member.bot and not include_bots:
+                        continue
+                    
+                    # Skip users without a username
+                    if not member.username:
+                        continue
+                    
+                    members.append({
+                        'user_id': member.id,
+                        'username': '@' + member.username,
+                        'scraped_date': datetime.now().isoformat()
+                    })
+                    
                     if len(members) % 100 == 0:
-                        print(f"   📊 Fetched {len(members)} members...")
+                        print(f"   📊 Collected {len(members)} members with usernames...")
                 
-                print(f"✅ Total members found: {len(members)}")
-                
+                print(f"✅ Total members with username: {len(members)}")
             except Exception as e:
-                print(f"Error fetching members: {e}")
-                print("💡 Possible reasons:")
-                print("   - Group restricts member list access")
-                print("   - You don't have permission to view members")
-                print("   - Group is private and you're not a member")
+                print(f"❌ Error fetching members: {e}")
                 return
-            
-            # Process member data - ONLY user_id, username, and phone
-            member_data = []
-            phone_numbers_found = 0
-            usernames_found = 0
-            
-            for i, member in enumerate(members):
-                # Skip bots unless requested
-                if member.bot and not include_bots:
-                    continue
-                
-                # Get phone number if available
-                phone_number = getattr(member, 'phone', '')
-                if phone_number:
-                    phone_numbers_found += 1
-                
-                # Get username and add @ prefix
-                username = getattr(member, 'username', '')
-                if username:
-                    username = '@' + username
-                    usernames_found += 1
-                
-                # Extract only user_id, username, and phone
-                member_info = {
-                    'user_id': member.id,
-                    'username': username,
-                    'phone': phone_number or '',
-                    'scraped_date': datetime.now().isoformat()
-                }
-                
-                member_data.append(member_info)
             
             # Generate output filename if not provided
             if output_file is None:
                 group_name = getattr(group, 'title', group_identifier)
-                # Clean filename
                 safe_name = "".join(c for c in group_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
                 safe_name = safe_name.replace(' ', '_')
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 output_file = f"{safe_name}_members_{timestamp}.csv"
             
-            # Save to CSV
-            await self.save_to_csv(member_data, output_file)
+            # Save results
+            await self.save_to_csv(members, output_file)
+            await self.save_to_json(members, output_file.replace('.csv', '.json'))
             
-            # Also save as JSON for better structure
-            json_file = output_file.replace('.csv', '.json')
-            await self.save_to_json(member_data, json_file)
-            
-            # Print summary
             print(f"\n📊 SCRAPING SUMMARY:")
             print(f"   Group: {getattr(group, 'title', 'Unknown')}")
-            print(f"   Total members processed: {len(member_data)}")
-            print(f"   Members with phone numbers: {phone_numbers_found}")
-            print(f"   Members with usernames: {usernames_found}")
-            print(f"   Bots included: {include_bots}")
-            print(f"   Output files: {output_file}, {json_file}")
+            print(f"   Members with usernames: {len(members)}")
+            print(f"   Output files: {output_file}, {output_file.replace('.csv', '.json')}")
     
     async def save_to_csv(self, data, filename):
-        """Save data to CSV file - only user_id, username, phone"""
+        """Save scraped members to CSV"""
         if not data:
-            print("No data to save")
+            print("⚠️ No data to save")
             return
         
-        fieldnames = ['user_id', 'username', 'phone', 'scraped_date']
-        
+        fieldnames = ['user_id', 'username', 'scraped_date']
         with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(data)
-        
-        print(f"✅ CSV saved: {filename} ({len(data)} records)")
+        print(f"✅ CSV saved: {filename}")
     
     async def save_to_json(self, data, filename):
-        """Save data to JSON file - only user_id, username, phone"""
+        """Save scraped members to JSON"""
         if not data:
             return
         
@@ -199,115 +154,18 @@ class TelegramGroupScraper:
         
         with open(filename, 'w', encoding='utf-8') as jsonfile:
             json.dump(output_data, jsonfile, indent=2, ensure_ascii=False)
-        
         print(f"✅ JSON saved: {filename}")
-    
-    async def scrape_multiple_groups(self, group_list, include_bots=False):
-        """Scrape multiple groups in sequence"""
-        print(f"🚀 Starting batch scraping of {len(group_list)} groups...")
-        
-        for i, group_id in enumerate(group_list, 1):
-            print(f"\n📍 Processing group {i}/{len(group_list)}: {group_id}")
-            await self.scrape_group_members(group_id, include_bots=include_bots)
-            
-            # Add delay between groups to avoid rate limiting
-            if i < len(group_list):
-                print("⏳ Waiting 3 seconds before next group...")
-                await asyncio.sleep(3)
-        
-        print(f"\n🎉 Batch scraping completed! Processed {len(group_list)} groups.")
-    
-    async def get_group_info(self, group_identifier):
-        """Get basic information about a group without scraping members"""
-        phone_number = await self.initialize_client()
-        
-        async with self.client:
-            await self.client.start(phone=phone_number)
-            
-            try:
-                group = await self.client.get_entity(group_identifier)
-                
-                info = {
-                    'id': group.id,
-                    'title': getattr(group, 'title', 'Unknown'),
-                    'username': getattr(group, 'username', ''),
-                    'type': type(group).__name__,
-                    'members_count': getattr(group, 'participants_count', 'Unknown'),
-                    'description': getattr(group, 'about', ''),
-                    'verified': getattr(group, 'verified', False),
-                    'scam': getattr(group, 'scam', False),
-                    'fake': getattr(group, 'fake', False)
-                }
-                
-                print("📋 GROUP INFORMATION:")
-                for key, value in info.items():
-                    print(f"   {key}: {value}")
-                
-                return info
-                
-            except Exception as e:
-                print(f"❌ Error getting group info: {e}")
-                return None
 
-    async def export_phone_numbers(self, csv_file, output_phones_file=None):
-        """Extract just phone numbers from a scraped CSV file"""
-        if not output_phones_file:
-            output_phones_file = csv_file.replace('.csv', '_phones.txt')
-        
-        phones = []
-        
-        try:
-            with open(csv_file, 'r', encoding='utf-8') as file:
-                reader = csv.DictReader(file)
-                for row in reader:
-                    if row['phone'] and row['phone'].strip():
-                        phones.append(row['phone'].strip())
-            
-            # Remove duplicates
-            phones = list(set(phones))
-            
-            # Save to file
-            with open(output_phones_file, 'w', encoding='utf-8') as f:
-                for phone in phones:
-                    f.write(phone + '\n')
-            
-            print(f"✅ Extracted {len(phones)} unique phone numbers to {output_phones_file}")
-            return phones
-            
-        except Exception as e:
-            print(f"❌ Error extracting phone numbers: {e}")
-            return []
 
-# Example usage and testing
+# Example usage
 async def main():
     scraper = TelegramGroupScraper()
     
-    print("🤖 Telegram Group Member Scraper")
-    print("=" * 50)
-    print("⚠️  EDUCATIONAL USE ONLY - Respect Privacy!")
-    print("⚠️  Phone number scraping may violate:")
-    print("   - Telegram Terms of Service")
-    print("   - Privacy laws (GDPR, CCPA, etc.)")
-    print("   - Ethical guidelines")
-    print("=" * 50)
-    
-    # Method 1: Single group scraping
-    print("\n1️⃣ Single Group Scraping:")
-    
-    # Replace with your target group
-    group_to_scrape = "@your_group_username"  # Change this to your target group
-    
-    # Get group info first (optional)
-    await scraper.get_group_info(group_to_scrape)
-    
-    # Scrape the group
+    group_to_scrape = "@your_group_username"  # Change this
     await scraper.scrape_group_members(
         group_identifier=group_to_scrape,
-        include_bots=False  # Set to True to include bots
+        include_bots=False
     )
-    
-    # Method 2: Extract phone numbers from existing CSV
-    # await scraper.export_phone_numbers('your_scraped_file.csv')
 
 if __name__ == "__main__":
     asyncio.run(main())

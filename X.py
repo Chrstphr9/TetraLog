@@ -175,8 +175,8 @@ async def main():
     API_HASH = '1282021130f80b5d74c806158149f7d9'
     PHONE_NUMBER = '+4915772334180'
 
-    TARGET_CHANNEL = 'https://t.me/+Zz4r7LiSa9o3YTUy'
-    SCRAPED_CSV = 'your_group_username_members_20250829_091727.csv'
+    TARGET_CHANNEL = 'https://t.me/+nZZuq9C8EZxkMmZi'
+    SCRAPED_CSV = 'your_group_username_members_20250829_142923.csv'
 
     if not await manager.initialize_client(API_ID, API_HASH, PHONE_NUMBER):
         return

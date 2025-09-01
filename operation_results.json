@@ -1,6 +1,8 @@
 {
-  "operation_date": "2025-08-29T09:36:32.181869",
-  "target_channel": "https://t.me/+Zz4r7LiSa9o3YTUy",
-  "successfully_added": 6,
-  "failed_to_add": 9
+  "operation_date": "2025-09-01T09:08:52.779774",
+  "target_channel": "https://t.me/+nZZuq9C8EZxkMmZi",
+  "successfully_added": 15,
+  "failed_to_add": 0,
+  "total_users_in_file": 66,
+  "limit_set": 15
 }
