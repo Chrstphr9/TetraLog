@@ -1,6 +1,10 @@
 import streamlit as st
 import asyncio
-from X import TelegramChannelManager
+try:
+    from X import TelegramChannelManager
+except Exception as import_error:
+    TelegramChannelManager = None
+    _telethon_import_error = import_error
 import json
 import pandas as pd
 import os
@@ -28,7 +32,7 @@ with col2:
 st.subheader("📁 User Data Source")
 data_source = st.radio(
     "Choose data source:",
-    ["📤 Upload CSV file", "📋 Use sample data", "📝 Enter data manually"],
+    ["📤 Upload CSV file", "📝 Enter data manually"],
     horizontal=True
 )
 
@@ -40,32 +44,6 @@ if data_source == "📤 Upload CSV file":
         "Upload CSV file with users", 
         type=["csv"],
         help="CSV should contain columns: username, user_id (required), phone, first_name, last_name (optional)"
-    )
-    
-elif data_source == "📋 Use sample data":
-    st.info("Using built-in sample data for testing")
-    sample_data = {
-        'username': ['john_doe', 'jane_smith', 'bob_wilson', 'alice_jones', 'charlie_brown'],
-        'user_id': ['123456789', '987654321', '555666777', '111222333', '444555666'],
-        'phone': ['+1234567890', '+0987654321', '+1112223333', '+2223334444', '+3334445555'],
-        'first_name': ['John', 'Jane', 'Bob', 'Alice', 'Charlie'],
-        'last_name': ['Doe', 'Smith', 'Wilson', 'Jones', 'Brown']
-    }
-    users_data = [dict(zip(sample_data.keys(), values)) for values in zip(*sample_data.values())]
-    
-    # Display sample data
-    st.write("📋 **Sample Data Preview:**")
-    sample_df = pd.DataFrame(sample_data)
-    st.dataframe(sample_df, use_container_width=True)
-    st.write(f"Total users in sample: {len(users_data)}")
-    
-    # Add download button for sample CSV
-    csv_data = sample_df.to_csv(index=False)
-    st.download_button(
-        label="📥 Download Sample CSV",
-        data=csv_data,
-        file_name="sample_users.csv",
-        mime="text/csv"
     )
     
 elif data_source == "📝 Enter data manually":
@@ -155,11 +133,17 @@ if os.path.exists('added_users.json'):
     st.info(f"📊 Previously added users: {len(added_users)}")
 
 if st.button("🚀 Start Adding Users", type="primary"):
+    if TelegramChannelManager is None:
+        st.error("Telethon (and dependencies) are not installed. Please install requirements and reload.")
+        st.code("pip install -r requirements.txt")
+        if '_telethon_import_error' in globals():
+            st.exception(_telethon_import_error)
+        raise SystemExit
     if not (api_id and api_hash and phone_number):
         st.error("⚠️ Please fill in all API credentials.")
     elif data_source == "📤 Upload CSV file" and not uploaded_file:
         st.error("⚠️ Please upload a CSV file.")
-    elif data_source in ["📋 Use sample data", "📝 Enter data manually"] and not users_data:
+    elif data_source == "📝 Enter data manually" and not users_data:
         st.error("⚠️ Please provide user data.")
     else:
         progress_bar = st.progress(0)
@@ -193,7 +177,7 @@ if st.button("🚀 Start Adding Users", type="primary"):
                         return
                     
                     users_data = df.fillna("").to_dict("records")
-                # For sample data and manual data, users_data is already loaded
+                # For manual data, users_data is already loaded
 
                 # Normalize data to match X.py expectations
                 for user in users_data:
@@ -274,7 +258,6 @@ with st.expander("ℹ️ How to use"):
     1. **Get API Credentials**: Visit https://my.telegram.org to get your API ID and API Hash
     2. **Choose Data Source**: 
        - **Upload CSV**: Upload your own CSV file with user data
-       - **Use Sample Data**: Use built-in sample data for testing
        - **Enter Manually**: Type user data directly into the form
     3. **CSV Format**: 
        - **Required**: `username`, `user_id`
