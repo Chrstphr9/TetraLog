@@ -244,7 +244,7 @@ class TelegramGroupScraperUI:
             st.sidebar.success("✅ Configuration file found")
         
         st.markdown("---")
-        st.caption("Made with Streamlit & Telethon")
+        st.caption("Si Vis Pacem, Para,bellu: If You Want Peace, Prepare For War")
 
 # Run the app
 if __name__ == "__main__":
